@@ -35,6 +35,11 @@ pub mod solana_deposit_app {
 
         Ok(())
     }
+
+    pub fn get_user_balance(ctx: Context<GetBalance>) -> Result<u64> {
+        let balance = ctx.accounts.user_account.to_account_info().lamports();
+        Ok(balance)
+    }
 }
 
 // Контекст для `deposit`
@@ -71,6 +76,17 @@ pub struct Withdraw<'info> {
     pub user_account: Account<'info, UserAccount>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct GetBalance<'info> {
+    pub user: Signer<'info>,
+
+    #[account(
+        seeds = [b"user_account", user.key().as_ref()],
+        bump
+    )]
+    pub user_account: Account<'info, UserAccount>,
 }
 
 #[account]

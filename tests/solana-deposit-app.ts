@@ -74,6 +74,20 @@ describe("solana-deposit-app", () => {
         console.assert(pdaBalance >= 0.2, "PDA balance should not be negative");
     });
 
+    it("Can get user balance via contract", async () => {
+        const balance = await program.methods
+            .getUserBalance()
+            .accounts({
+                user: user.publicKey,
+                userAccount: pda,
+            })
+            .view();
+
+        const actualBalance = await provider.connection.getBalance(pda);
+
+        assert.equal(balance.toString(), actualBalance.toString());
+    });
+
     it("Cannot withdraw more than balance", async () => {
         try {
             const overWithdraw = 1 * anchor.web3.LAMPORTS_PER_SOL;
