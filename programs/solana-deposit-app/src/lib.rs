@@ -7,42 +7,51 @@ pub mod solana_deposit_app {
     use super::*;
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
+        let user_vault = &mut ctx.accounts.user_vault;
         let user = &ctx.accounts.user;
 
-        // CPI к SystemProgram: переводим лампорты
-        let cpi_accounts = anchor_lang::system_program::Transfer {
+        let cpi_transfer = anchor_lang::system_program::Transfer {
             from: user.to_account_info(),
-            to: user_account.to_account_info(),
+            to: user_vault.to_account_info(),
         };
-        let cpi_ctx = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
+        let cpi_ctx = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_transfer);
         anchor_lang::system_program::transfer(cpi_ctx, amount)?;
 
         Ok(())
     }
 
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
-        let user_account_info = ctx.accounts.user_account.to_account_info();
+        let user_vault_info = ctx.accounts.user_vault.to_account_info();
         let user_info = ctx.accounts.user.to_account_info();
 
         require!(
-            **user_account_info.lamports.borrow() >= amount,
+            **user_vault_info.lamports.borrow() >= amount,
             ErrorCode::InsufficientFunds
         );
 
-        **user_info.lamports.borrow_mut() += amount;
-        **user_account_info.lamports.borrow_mut() -= amount;
+        let user_key = ctx.accounts.user.key();
+        let signer_seeds: &[&[&[u8]]] =
+            &[&[b"user_vault", user_key.as_ref(), &[ctx.bumps.user_vault]]];
+
+        let transfer_accounts = anchor_lang::system_program::Transfer {
+            from: user_vault_info,
+            to: user_info,
+        };
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            transfer_accounts,
+        ).with_signer(signer_seeds);
+        anchor_lang::system_program::transfer(cpi_context, amount)?;
 
         Ok(())
     }
 
     pub fn get_user_balance(ctx: Context<GetBalance>) -> Result<u64> {
-        let balance = ctx.accounts.user_account.to_account_info().lamports();
+        let balance = ctx.accounts.user_vault.to_account_info().lamports();
         Ok(balance)
     }
 }
 
-// Контекст для `deposit`
 #[derive(Accounts)]
 #[instruction(amount: u64)]
 pub struct Deposit<'info> {
@@ -50,18 +59,15 @@ pub struct Deposit<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        init_if_needed,
-        seeds = [b"user_account", user.key().as_ref()],
+        mut,
+        seeds = [b"user_vault", user.key().as_ref()],
         bump,
-        payer = user,
-        space = 8,
     )]
-    pub user_account: Account<'info, UserAccount>,
+    pub user_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
-// Контекст для `withdraw`
 #[derive(Accounts)]
 #[instruction(amount: u64)]
 pub struct Withdraw<'info> {
@@ -70,10 +76,10 @@ pub struct Withdraw<'info> {
 
     #[account(
         mut,
-        seeds = [b"user_account", user.key().as_ref()],
+        seeds = [b"user_vault", user.key().as_ref()],
         bump
     )]
-    pub user_account: Account<'info, UserAccount>,
+    pub user_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -83,14 +89,11 @@ pub struct GetBalance<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        seeds = [b"user_account", user.key().as_ref()],
+        seeds = [b"user_vault", user.key().as_ref()],
         bump
     )]
-    pub user_account: Account<'info, UserAccount>,
+    pub user_vault: SystemAccount<'info>,
 }
-
-#[account]
-pub struct UserAccount;
 
 #[error_code]
 pub enum ErrorCode {

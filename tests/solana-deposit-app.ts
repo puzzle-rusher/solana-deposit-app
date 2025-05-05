@@ -12,7 +12,6 @@ describe("solana-deposit-app", () => {
 
     let user = anchor.web3.Keypair.generate();
     let pda: PublicKey;
-    let bump: number;
 
     before(async () => {
         // Airdrop SOL to the user
@@ -20,8 +19,8 @@ describe("solana-deposit-app", () => {
         await provider.connection.confirmTransaction(signature);
 
         // Derive PDA
-        [pda, bump] = await PublicKey.findProgramAddressSync(
-            [Buffer.from("user_account"), user.publicKey.toBuffer()],
+        [pda] = await PublicKey.findProgramAddressSync(
+            [Buffer.from("user_vault"), user.publicKey.toBuffer()],
             program.programId
         );
     });
@@ -62,7 +61,6 @@ describe("solana-deposit-app", () => {
             .accounts({
                 user: user.publicKey,
                 userAccount: pda,
-                systemProgram: SystemProgram.programId,
             })
             .signers([user])
             .rpc();
